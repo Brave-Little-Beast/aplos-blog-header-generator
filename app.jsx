@@ -311,7 +311,7 @@ function App() {
       <main className="stage">
         <div className="stage-head">
           <div className="stage-head-title">
-            <span className="dot" /> Aplos blog header
+            <span className="dot" /> Aplos Data Gradient Generator
           </div>
           <div className="stage-head-meta">
             <span>{dims.w} × {dims.h}</span>
