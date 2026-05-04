@@ -485,6 +485,17 @@ body {
   color: var(--text);
   font-weight: 500;
 }
+.build-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-left: 4px;
+}
 .dot {
   width: 7px; height: 7px;
   border-radius: 0;

@@ -83,6 +83,14 @@ function renderToCanvas(cfg) {
 }
 
 function App() {
+  const [version, setVersion] = useState(null);
+  useEffect(() => {
+    fetch('version.json', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
+
   const [style, setStyle] = useState('random');
   const [mode, setMode] = useState('dark');
   const [angle, setAngle] = useState(135);
@@ -321,6 +329,11 @@ function App() {
         <div className="stage-head">
           <div className="stage-head-title">
             <span className="dot" /> Aplos Data Gradient Generator
+            {version && (
+              <span className="build-tag" title={version.date || ''}>
+                Build {version.build} · {version.sha}
+              </span>
+            )}
           </div>
           <div className="stage-head-meta">
             <span>{dims.w} × {dims.h}</span>
