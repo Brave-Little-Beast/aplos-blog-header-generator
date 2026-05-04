@@ -117,37 +117,38 @@ function buildPalette(mode, rng) {
   ];
 }
 
-// Accent strength presets — 'hint' = 1 soft blob, 'splash' = 2 with more presence.
+// Accent strength presets — how many palette slots get swapped for accent shades.
+// 'hint' = 1 slot (one of the style's natural color elements becomes accent),
+// 'splash' = 2 slots (two natural elements become accent).
 const ACCENT_STRENGTHS = {
-  hint:   { count: 1, alpha: 0.35 },
-  splash: { count: 2, alpha: 0.55 },
+  hint:   { count: 1 },
+  splash: { count: 2 },
 };
 
-// Render 1-2 large soft radial blobs of the accent color on top of the canvas.
-// Positions are biased into off-center quadrants so the accent reads as a
-// localized region of color, not a uniform tint.
-function renderAccentBlobs(ctx, w, h, accentColor, rng, strength) {
-  const { count, alpha } = ACCENT_STRENGTHS[strength] || ACCENT_STRENGTHS.hint;
-  // Pick a base angle for the placement — splash uses two opposite quadrants,
-  // hint uses just one.
-  const baseAngle = rng() * Math.PI * 2;
-  for (let i = 0; i < count; i++) {
-    const theta = baseAngle + (i * Math.PI) + (rng() - 0.5) * 0.6;
-    const dist = 0.22 + rng() * 0.12; // 22-34% from center
-    const cx = w / 2 + Math.cos(theta) * w * dist;
-    const cy = h / 2 + Math.sin(theta) * h * dist;
-    const radius = (0.55 + rng() * 0.25) * Math.max(w, h);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    grad.addColorStop(0,   accentColor + 'ff');
-    grad.addColorStop(0.5, accentColor + '66');
-    grad.addColorStop(1,   accentColor + '00');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+// Replace 1-2 of the base palette's mid/light slots with accent shades.
+// The accent then appears as a native color of the style — one of the mesh
+// blobs is clay, one of the aurora ribbons is clay, etc — instead of being
+// overlaid as a separate patch. Slot 0 is preserved (it's the background).
+function applyAccentToPalette(basePalette, family, strength, accentSeed) {
+  const accent = SECONDARY[family]; // [light, mid, dark]
+  if (!accent) return basePalette;
+  const { count } = ACCENT_STRENGTHS[strength] || ACCENT_STRENGTHS.hint;
+  const rng = makeRng(accentSeed);
+  // Candidate slots: skip slot 0 so the canvas background stays the base color.
+  const candidates = [];
+  for (let i = 1; i < basePalette.length; i++) candidates.push(i);
+  // Fisher-Yates shuffle, take first `count`
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
+  const slots = candidates.slice(0, Math.min(count, candidates.length));
+  const shades = [accent[1], accent[0]]; // mid first, then light if Splash
+  const palette = [...basePalette];
+  slots.forEach((slot, idx) => {
+    palette[slot] = shades[idx % shades.length];
+  });
+  return palette;
 }
 
 // Convert angle (deg) to a vector
@@ -300,45 +301,66 @@ function renderBlobs(ctx, w, h, palette, rng, angle, sizeScale) {
 function renderAurora(ctx, w, h, palette, rng, angle, sizeScale) {
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, w, h);
-  // Stack of softer, fewer bands flowing roughly along angle
+  // Aurora — thin curving ribbons of color, like the real thing.
+  // Each ribbon is a sine-wave centerline drawn as a layered stroke
+  // (wide low-alpha halo, medium body, bright narrow core) so the
+  // edges read as a glow rather than a hard band.
   const v = angleVec(angle);
-  const nx = -v.y, ny = v.x; // perpendicular
-  const bands = 4;
-  for (let i = 0; i < bands; i++) {
-    const t = bands === 1 ? 0.5 : i / (bands - 1);
-    const offset = (t - 0.5) * Math.max(w, h) * 0.7;
+  const nx = -v.y, ny = v.x; // perpendicular to the angle axis
+  const maxDim = Math.max(w, h);
+  const ribbonCount = 6 + Math.floor(rng() * 3); // 6-8 ribbons
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (let i = 0; i < ribbonCount; i++) {
+    const t = ribbonCount === 1 ? 0.5 : i / (ribbonCount - 1);
+    // Spread ribbons across nearly the whole perpendicular axis,
+    // with small jitter so they don't sit on a perfectly even grid.
+    const offset = ((t - 0.5) + (rng() - 0.5) * 0.08) * maxDim * 0.95;
     const cx = w / 2 + nx * offset;
     const cy = h / 2 + ny * offset;
-    const c = palette[1 + (i % (palette.length - 1))];
+    const color = palette[1 + (i % (palette.length - 1))];
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(Math.atan2(v.y, v.x));
-    const bandW = Math.max(w, h) * 1.8;
-    const bandH = Math.max(w, h) * (0.28 + rng() * 0.12) * sizeScale;
-    // Softer alpha falloff — no hard middle band
-    const grad = ctx.createLinearGradient(0, -bandH, 0, bandH);
-    grad.addColorStop(0,    c + '00');
-    grad.addColorStop(0.4,  c + '88');
-    grad.addColorStop(0.6,  c + '88');
-    grad.addColorStop(1,    c + '00');
-    ctx.fillStyle = grad;
-    const steps = 32;
-    const wobble = (rng() - 0.5) * bandH * 0.4;
+
+    // Ribbon thickness — ~4-9% of max dim, multiplied by scale.
+    const thickness = maxDim * (0.04 + rng() * 0.05) * sizeScale;
+    const span = maxDim * 2.0; // wider than canvas so ends always run off edge
+    // Centerline wobble — amplitude is multiples of thickness, so the ribbon
+    // visibly curves rather than reading flat.
+    const cycles = 1.0 + rng() * 1.0;
+    const wobbleAmp = thickness * (0.6 + rng() * 0.8);
     const phase = rng() * Math.PI * 2;
-    ctx.beginPath();
-    for (let s = 0; s <= steps; s++) {
-      const x = -bandW / 2 + (s / steps) * bandW;
-      const y = -bandH + Math.sin((s / steps) * Math.PI * 2 + phase) * wobble;
-      s === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    for (let s = steps; s >= 0; s--) {
-      const x = -bandW / 2 + (s / steps) * bandW;
-      const y = bandH + Math.sin((s / steps) * Math.PI * 2 + phase + 1) * wobble;
-      ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
+    const steps = 96;
+
+    const buildPath = () => {
+      ctx.beginPath();
+      for (let s = 0; s <= steps; s++) {
+        const x = -span / 2 + (s / steps) * span;
+        const y = Math.sin((s / steps) * Math.PI * 2 * cycles + phase) * wobbleAmp;
+        s === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+    };
+
+    // Soft outer halo
+    buildPath();
+    ctx.lineWidth = thickness * 2.2;
+    ctx.strokeStyle = color + '22';
+    ctx.stroke();
+    // Mid body
+    buildPath();
+    ctx.lineWidth = thickness * 1.2;
+    ctx.strokeStyle = color + '55';
+    ctx.stroke();
+    // Bright core
+    buildPath();
+    ctx.lineWidth = thickness * 0.5;
+    ctx.strokeStyle = color + '99';
+    ctx.stroke();
+
     ctx.restore();
   }
 }
@@ -500,18 +522,19 @@ function renderGradient({
     const styles = Object.keys(STYLE_RENDERERS);
     actualStyle = styles[Math.floor(rng() * styles.length)];
   }
-  const palette = buildPalette(mode, rng);
+  let palette = buildPalette(mode, rng);
+  // Secondary accent — replace 1-2 palette slots with accent shades so the
+  // accent appears as a native color of the style (one mesh blob is clay,
+  // one aurora ribbon is clay, etc.) instead of being overlaid on top.
+  // accentSeed controls which slots get replaced, so Move rerolls placement.
+  if (secondaryFamily && SECONDARY[secondaryFamily] && accentStrength) {
+    palette = applyAccentToPalette(
+      palette, secondaryFamily, accentStrength,
+      accentSeed != null ? accentSeed : seed + 2
+    );
+  }
   const sizeScale = SCALE_PRESETS[scale] ?? SCALE_PRESETS.medium;
   STYLE_RENDERERS[actualStyle](ctx, width, height, palette, rng, angle, sizeScale);
-
-  // Secondary accent — soft localized blobs of the accent color.
-  // Uses its own seed so the "Move accent" button can reroll positions
-  // without regenerating the base gradient.
-  if (secondaryFamily && SECONDARY[secondaryFamily] && accentStrength) {
-    const accentColor = SECONDARY[secondaryFamily][1]; // mid shade
-    const accentRng = makeRng(accentSeed != null ? accentSeed : seed + 2);
-    renderAccentBlobs(ctx, width, height, accentColor, accentRng, accentStrength);
-  }
 
   applyBlur(ctx, width, height, blur);
   const noiseDrawn = applyNoise(ctx, width, height, blur);
