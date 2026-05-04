@@ -24,6 +24,12 @@ const BLURS = [
   { id: 'heavy', label: 'Heavy' },
 ];
 
+const SCALES = [
+  { id: 'small',  label: 'Small' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'large',  label: 'Large' },
+];
+
 const RESOLUTIONS = [
   { id: 2000, label: '2000 × 1125', sub: 'Min spec' },
   { id: 2400, label: '2400 × 1350', sub: '' },
@@ -82,6 +88,7 @@ function App() {
   const [angle, setAngle] = useState(135);
   const [seed, setSeed] = useState(() => newSeed());
   const [blur, setBlur] = useState('medium');
+  const [scale, setScale] = useState('medium'); // 'small' | 'medium' | 'large'
   const [secondaryFamily, setSecondaryFamily] = useState(null);
   const [accentStrength, setAccentStrength] = useState('hint'); // 'hint' | 'splash'
   const [accentSeed, setAccentSeed] = useState(() => newSeed());
@@ -142,7 +149,7 @@ function App() {
         canvas: fullCanvasRef.current,
         width: PREVIEW_W,
         height: PREVIEW_H,
-        style, mode, angle, seed, blur,
+        style, mode, angle, seed, blur, scale,
         secondaryFamily, accentStrength, accentSeed,
         showLogo, logoPosition: logoPos,
       });
@@ -164,7 +171,7 @@ function App() {
       }
       setRendering(false);
     });
-  }, [style, mode, angle, seed, blur, secondaryFamily, accentStrength, accentSeed, showLogo, logoPos, drawToPreview]);
+  }, [style, mode, angle, seed, blur, scale, secondaryFamily, accentStrength, accentSeed, showLogo, logoPos, drawToPreview]);
 
   useEffect(() => { render(); }, [render]);
   useEffect(() => {
@@ -175,7 +182,7 @@ function App() {
 
   // Build a config object from current state
   const currentConfig = () => ({
-    width: dims.w, height: dims.h, style, mode, angle, seed, blur,
+    width: dims.w, height: dims.h, style, mode, angle, seed, blur, scale,
     secondaryFamily, accentStrength, accentSeed,
     showLogo, logoPosition: logoPos,
   });
@@ -223,7 +230,7 @@ function App() {
       canvas: thumbCanvas,
       width: 320, height: 180,
       style: fav.cfg.style, mode: fav.cfg.mode, angle: fav.cfg.angle,
-      seed: fav.cfg.seed, blur: fav.cfg.blur,
+      seed: fav.cfg.seed, blur: fav.cfg.blur, scale: fav.cfg.scale,
       secondaryFamily: fav.cfg.secondaryFamily,
       accentStrength: fav.cfg.accentStrength,
       accentSeed: fav.cfg.accentSeed,
@@ -237,6 +244,7 @@ function App() {
     const c = fav.cfg;
     setStyle(c.style); setMode(c.mode); setAngle(c.angle);
     setSeed(c.seed); setBlur(c.blur);
+    setScale(c.scale ?? 'medium');
     setSecondaryFamily(c.secondaryFamily ?? null);
     setAccentStrength(c.accentStrength ?? 'hint');
     setAccentSeed(c.accentSeed ?? newSeed());
@@ -293,6 +301,7 @@ function App() {
         mode={mode} setMode={setMode}
         angle={angle} setAngle={setAngle}
         blur={blur} setBlur={setBlur}
+        scale={scale} setScale={setScale}
         secondaryFamily={secondaryFamily} setSecondaryFamily={setSecondaryFamily}
         accentStrength={accentStrength} setAccentStrength={setAccentStrength}
         moveAccent={moveAccent}
@@ -474,6 +483,7 @@ function BatchModal({ count, setCount, progress, onClose, onRun, format, mode })
 function Sidebar(props) {
   const {
     style, setStyle, mode, setMode, angle, setAngle, blur, setBlur,
+    scale, setScale,
     secondaryFamily, setSecondaryFamily,
     accentStrength, setAccentStrength, moveAccent,
     showLogo, setShowLogo, logoPos, setLogoPos,
@@ -496,7 +506,7 @@ function Sidebar(props) {
           />
         </Section>
 
-        <Section title="Style">
+        <Section title="Gradient Style">
           <Segmented
             value={style} onChange={setStyle}
             options={STYLES.map(s => ({ id: s.id, label: s.label }))}
@@ -504,7 +514,15 @@ function Sidebar(props) {
           />
         </Section>
 
-        <Section title="Angle" suffix={`${angle}°`}>
+        <Section title="Gradient Scale">
+          <Segmented
+            value={scale} onChange={setScale}
+            options={SCALES.map(s => ({ id: s.id, label: s.label }))}
+            cols={3}
+          />
+        </Section>
+
+        <Section title="Gradient Angle" suffix={`${angle}°`}>
           <Slider min={0} max={360} step={1} value={angle} onChange={setAngle} />
           <div className="angle-presets">
             {[0, 45, 90, 135, 180, 225, 270, 315].map(a => (

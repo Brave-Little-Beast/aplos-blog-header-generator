@@ -157,9 +157,11 @@ function angleVec(deg) {
 }
 
 // ---- Style renderers ----
-// All take (ctx, w, h, palette, rng, angleDeg)
+// All take (ctx, w, h, palette, rng, angleDeg, sizeScale)
+// sizeScale is a 1.0-centered multiplier applied to each style's dominant
+// geometric feature (blob radius, band thickness, etc.)
 
-function renderRadialBlobs(ctx, w, h, palette, rng, angle) {
+function renderRadialBlobs(ctx, w, h, palette, rng, angle, sizeScale) {
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, w, h);
   const v = angleVec(angle);
@@ -172,7 +174,7 @@ function renderRadialBlobs(ctx, w, h, palette, rng, angle) {
     // Project along angle, add perpendicular jitter
     const px = w / 2 + along * v.x * w * 0.6 + (-v.y) * jitter * w;
     const py = h / 2 + along * v.y * h * 0.6 + v.x * jitter * h;
-    const radius = (0.35 + rng() * 0.45) * Math.max(w, h);
+    const radius = (0.35 + rng() * 0.45) * Math.max(w, h) * sizeScale;
     const color = palette[1 + (i % (palette.length - 1))];
     const grad = ctx.createRadialGradient(px, py, 0, px, py, radius);
     grad.addColorStop(0, color);
@@ -182,7 +184,7 @@ function renderRadialBlobs(ctx, w, h, palette, rng, angle) {
   }
 }
 
-function renderMesh(ctx, w, h, palette, rng, angle) {
+function renderMesh(ctx, w, h, palette, rng, angle, sizeScale) {
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, w, h);
   // Mesh: scatter ~7 control points, big soft radial gradients
@@ -195,7 +197,7 @@ function renderMesh(ctx, w, h, palette, rng, angle) {
     const along = (rng() - 0.5) * 0.8;
     const px = w * (0.5 + ax * 0.45 + along * v.x * 0.3);
     const py = h * (0.5 + ay * 0.45 + along * v.y * 0.3);
-    const radius = (0.5 + rng() * 0.5) * Math.max(w, h);
+    const radius = (0.5 + rng() * 0.5) * Math.max(w, h) * sizeScale;
     const color = palette[(i + 1) % palette.length];
     const grad = ctx.createRadialGradient(px, py, 0, px, py, radius);
     grad.addColorStop(0, color + 'cc');
@@ -206,7 +208,7 @@ function renderMesh(ctx, w, h, palette, rng, angle) {
   }
 }
 
-function renderLinear(ctx, w, h, palette, rng, angle) {
+function renderLinear(ctx, w, h, palette, rng, angle, sizeScale) {
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, w, h);
   // Main linear gradient
@@ -232,7 +234,7 @@ function renderLinear(ctx, w, h, palette, rng, angle) {
   for (let i = 0; i < 2; i++) {
     const px = w * (0.2 + rng() * 0.6);
     const py = h * (0.2 + rng() * 0.6);
-    const r = (0.3 + rng() * 0.3) * Math.max(w, h);
+    const r = (0.3 + rng() * 0.3) * Math.max(w, h) * sizeScale;
     const c = palette[Math.floor(rng() * palette.length)];
     const rg = ctx.createRadialGradient(px, py, 0, px, py, r);
     rg.addColorStop(0, c + '88');
@@ -242,7 +244,7 @@ function renderLinear(ctx, w, h, palette, rng, angle) {
   }
 }
 
-function renderBlobs(ctx, w, h, palette, rng, angle) {
+function renderBlobs(ctx, w, h, palette, rng, angle, sizeScale) {
   // Random freeform organic blobs — a few large, soft, irregular shapes
   // built from radial gradients with displaced edges, layered on a base color.
   ctx.fillStyle = palette[0];
@@ -257,7 +259,7 @@ function renderBlobs(ctx, w, h, palette, rng, angle) {
     const perp = (rng() - 0.5) * 1.0;
     const cx = w / 2 + along * v.x * w * 0.55 + (-v.y) * perp * w * 0.35;
     const cy = h / 2 + along * v.y * h * 0.55 + v.x * perp * h * 0.35;
-    const baseR = (0.28 + rng() * 0.35) * Math.max(w, h);
+    const baseR = (0.28 + rng() * 0.35) * Math.max(w, h) * sizeScale;
 
     // Pick color: alternate mid + light to keep harmony
     const c = palette[1 + Math.floor(rng() * (palette.length - 1))];
@@ -295,7 +297,7 @@ function renderBlobs(ctx, w, h, palette, rng, angle) {
   }
 }
 
-function renderAurora(ctx, w, h, palette, rng, angle) {
+function renderAurora(ctx, w, h, palette, rng, angle, sizeScale) {
   ctx.fillStyle = palette[0];
   ctx.fillRect(0, 0, w, h);
   // Stack of softer, fewer bands flowing roughly along angle
@@ -313,7 +315,7 @@ function renderAurora(ctx, w, h, palette, rng, angle) {
     ctx.translate(cx, cy);
     ctx.rotate(Math.atan2(v.y, v.x));
     const bandW = Math.max(w, h) * 1.8;
-    const bandH = Math.max(w, h) * (0.28 + rng() * 0.12);
+    const bandH = Math.max(w, h) * (0.28 + rng() * 0.12) * sizeScale;
     // Softer alpha falloff — no hard middle band
     const grad = ctx.createLinearGradient(0, -bandH, 0, bandH);
     grad.addColorStop(0,    c + '00');
@@ -354,6 +356,15 @@ const BLUR_PRESETS = {
   soft: 0.04,    // 4% of min dimension
   medium: 0.07,
   heavy: 0.12,
+};
+
+// Size multiplier applied to each style's dominant geometric feature.
+// Independent of seed: same seed at different scales = same composition,
+// just smaller or bigger.
+const SCALE_PRESETS = {
+  small:  0.65,
+  medium: 1.0,
+  large:  1.55,
 };
 
 // Apply gaussian-style blur via canvas filter, with edge-extend padding so the
@@ -471,6 +482,7 @@ function renderGradient({
   angle,            // 0..360
   seed,             // integer — base gradient
   blur,             // 'soft' | 'medium' | 'heavy'
+  scale,            // 'small' | 'medium' | 'large'
   secondaryFamily,  // null | 'blue' | 'purple' | 'clay' | 'yellow'
   accentStrength,   // 'hint' | 'splash' (only when secondaryFamily is set)
   accentSeed,       // integer — accent blob positions, independent of base seed
@@ -489,7 +501,8 @@ function renderGradient({
     actualStyle = styles[Math.floor(rng() * styles.length)];
   }
   const palette = buildPalette(mode, rng);
-  STYLE_RENDERERS[actualStyle](ctx, width, height, palette, rng, angle);
+  const sizeScale = SCALE_PRESETS[scale] ?? SCALE_PRESETS.medium;
+  STYLE_RENDERERS[actualStyle](ctx, width, height, palette, rng, angle, sizeScale);
 
   // Secondary accent — soft localized blobs of the accent color.
   // Uses its own seed so the "Move accent" button can reroll positions
@@ -516,4 +529,5 @@ window.GradientEngine = {
   APLOS,
   MODE_PALETTES,
   BLUR_PRESETS,
+  SCALE_PRESETS,
 };
